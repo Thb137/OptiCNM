@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head>
+<head> <!-- Supabase UMD (doit être dans <head>) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  const SUPABASE_URL = "https://loiukywplbubyghbrexz.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvaXVreXdwbGJ1YnlnaGJyZXh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYxMjEzNDYsImV4cCI6MjA3MTY5NzM0Nn0.gDqfiTlNyGCztFQDjALlSUgF6BvJxGrnHnH9zICmAqQ";
+  window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+</script>
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cellule d'Optimisation CN Marseille</title>
