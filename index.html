@@ -816,6 +816,7 @@ function renderSeances(){
  *  ATHLÈTES
  *************************************************/
 function renderAthletes(){
+  // UI
   elView.innerHTML = ''
     + '<div class="panel">'
     +   '<h2>Ajouter un athlète</h2>'
@@ -835,31 +836,112 @@ function renderAthletes(){
     +   '<table id="tblAth"><thead><tr><th></th><th>Nom</th><th>Année d\'âge</th><th>Groupe</th><th></th></tr></thead><tbody></tbody></table>'
     + '</div>';
 
-  document.getElementById('btnAddAthlete').onclick = async ()=>{
-    const name = document.getElementById('a_name').value.trim();
-    if(!name) return alert('Nom requis');
-    const anneeAge = (document.getElementById('a_age').value||'').trim();
-    const groupe = (document.getElementById('a_group').value||'').trim();
-    const file = document.getElementById('a_avatar').files[0];
-    let avatar = null;
-    if(file){ avatar = await fileToDataURL(file); }
-    state.athletes.push({id:uid(), name, anneeAge, groupe, avatar}); save(); mountAthleteFilter(); renderAthletes();
+  // --- handler "Ajouter" (RPC + Storage + profil) ---
+  document.getElementById('btnAddAthlete').onclick = async () => {
+    const supa = window.supabaseClient;
+
+    const name = (document.getElementById('a_name')?.value || '').trim();
+    const anneeAge = (document.getElementById('a_age')?.value || '').trim();
+    const groupe = (document.getElementById('a_group')?.value || '').trim();
+    const file = document.getElementById('a_avatar')?.files?.[0] || null;
+
+    if (!name) { alert('Nom requis'); return; }
+
+    // 1) crée l’athlète + son profil
+    const { data: athleteId, error: rpcErr } = await supa.rpc('onboard_athlete', {
+      p_name: name,
+      p_avatar_url: '',        // on mettra l’URL après upload
+      p_group_tag: groupe
+    });
+    if (rpcErr) { alert('Erreur création: ' + rpcErr.message); return; }
+
+    // 2) upload avatar si présent, puis maj de l’URL sur l’athlète
+    if (file) {
+      try {
+        const clean = (Date.now() + '_' + file.name).replace(/\s+/g,'_');
+        const path = `athletes/${athleteId}/${clean}`;
+        const { error: upErr } = await supa.storage.from('attachments').upload(path, file);
+        if (upErr) throw upErr;
+        const { data: pub } = supa.storage.from('attachments').getPublicUrl(path);
+        await supa.from('athletes').update({ avatar_url: pub.publicUrl }).eq('id', athleteId);
+      } catch (e) {
+        console.warn('Upload avatar échoué:', e.message);
+      }
+    }
+
+    // 3) enregistrer "année d'âge" dans le profil (champ note)
+    if (anneeAge) {
+      await supa.from('athlete_profile')
+        .update({ note: `anneeAge: ${anneeAge}` })
+        .eq('athlete_id', athleteId);
+    }
+
+    // 4) reset + refresh
+    document.getElementById('a_name').value = '';
+    document.getElementById('a_age').value = '';
+    document.getElementById('a_group').value = '';
+    if (document.getElementById('a_avatar')) document.getElementById('a_avatar').value = '';
+    await loadAndRenderAthletes();
+    alert('Athlète + profil créés !');
   };
 
-  const tbody = elView.querySelector('#tblAth tbody');
-  tbody.innerHTML = state.athletes.map(a=>(
-    '<tr>'
-    + '<td>'+(a.avatar? ('<img class="avatar" src="'+a.avatar.data+'" />') : '<div class="avatar"></div>')+'</td>'
-    + '<td>'+(a.name||'')+'</td>'
-    + '<td>'+(a.anneeAge||'')+'</td>'
-    + '<td>'+(a.groupe||'')+'</td>'
-    + '<td><button class="btn tiny" data-del="'+a.id+'">Suppr.</button></td>'
-    + '</tr>'
-  )).join('');
+  // --- charge et affiche la liste depuis Supabase ---
+  async function loadAndRenderAthletes(){
+    const supa = window.supabaseClient;
+    const tbody = elView.querySelector('#tblAth tbody');
+    if (!tbody) return;
 
-  tbody.querySelectorAll('[data-del]').forEach(b=>{
-    b.onclick = ()=>{ state.athletes = state.athletes.filter(x=>x.id!==b.getAttribute('data-del')); save(); mountAthleteFilter(); renderAthletes(); };
-  });
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">Chargement…</td></tr>';
+
+    // 1) lire les athlètes
+    const { data: athletes, error: e1 } = await supa
+      .from('athletes')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (e1) { tbody.innerHTML = `<tr><td colspan="5">Erreur: ${e1.message}</td></tr>`; return; }
+
+    if (!athletes || athletes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted">Aucun athlète pour l’instant.</td></tr>';
+      return;
+    }
+
+    // 2) lire les profils correspondants pour récupérer "année d'âge" (note)
+    const ids = athletes.map(a => a.id);
+    let notesById = {};
+    if (ids.length) {
+      const { data: profs } = await supa
+        .from('athlete_profile')
+        .select('athlete_id, note')
+        .in('athlete_id', ids);
+      (profs || []).forEach(p => { notesById[p.athlete_id] = p.note || ''; });
+    }
+
+    // 3) rendu
+    tbody.innerHTML = athletes.map(a => {
+      const note = notesById[a.id] || '';
+      const ageTxt = note.startsWith('anneeAge: ') ? note.slice('anneeAge: '.length) : '';
+      return (
+        '<tr>'
+        + '<td>' + (a.avatar_url ? ('<img class="avatar" src="'+a.avatar_url+'"/>') : '<div class="avatar"></div>') + '</td>'
+        + '<td>' + (a.name || '') + '</td>'
+        + '<td>' + (ageTxt || '') + '</td>'
+        + '<td>' + (a.group_tag || '') + '</td>'
+        + '<td><button class="btn tiny" data-del="'+a.id+'">Suppr.</button></td>'
+        + '</tr>'
+      );
+    }).join('');
+
+    // 4) suppression (cascade sur athlete_profile si FK ON DELETE CASCADE est en place)
+    tbody.querySelectorAll('[data-del]').forEach(b => {
+      b.onclick = async () => {
+        await supa.from('athletes').delete().eq('id', b.getAttribute('data-del'));
+        await loadAndRenderAthletes();
+      };
+    });
+  }
+
+  // premier affichage
+  loadAndRenderAthletes();
 }
 
 /*************************************************
