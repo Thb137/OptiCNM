@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cellule d'Optimisation CN Marseille</title>
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- SheetJS (XLSX) pour import HRV/Compétitions -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{
+      --bg:#0f1115; --panel:#141823; --muted:#7c8899; --text:#e7ecf5; --accent:#5aa9ff;
+      --green:#2ecc71; --blue:#3498db; --orange:#f39c12; --red:#e74c3c; --purple:#9b59b6;
+      --ok:#29cc76; --warn:#ffb020; --bad:#ff5d5d;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0; padding:0; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+    h1,h2,h3{margin:0.6rem 0}
+    a{color:var(--accent)}
+    .wrap{max-width:1200px; margin:0 auto; padding:12px}
+    .topbar{display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px}
+    .brand{font-weight:700; letter-spacing:0.2px; display:flex; align-items:center; gap:8px}
+    .tabs{display:flex; flex-wrap:wrap; gap:6px}
+    .tab{background:var(--panel); padding:8px 10px; border-radius:10px; cursor:pointer; user-select:none; font-size:13px}
+    .tab.active{outline:1px solid #2a3246; background:#171c2a}
+    .panel{background:var(--panel); border:1px solid #1b2233; border-radius:14px; padding:12px;}
+    .grid{display:grid; gap:10px}
+    .g2{grid-template-columns:1fr 1fr}
+    .g3{grid-template-columns:repeat(3,1fr)}
+    .g4{grid-template-columns:repeat(4,1fr)}
+    @media (max-width:980px){ .g2,.g3,.g4{grid-template-columns:1fr} }
+
+    .input{background:#0c0f16; border:1px solid #1c2333; color:var(--text); padding:8px 10px; border-radius:10px; font-size:13px; width:100%}
+    .btn{background:#1c2436; color:#fff; border:1px solid #2a3246; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:13px}
+    .btn.primary{background:#103359; border-color:#214d7a}
+    .btn.ghost{background:transparent; border-color:#2a3246}
+    .chip{display:inline-flex; align-items:center; gap:6px; background:#0d1220; border:1px solid #242b40; padding:4px 8px; border-radius:999px; font-size:12px}
+
+    .tiny{font-size:11px; color:var(--muted)}
+    .muted{color:var(--muted)}
+    .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+    .spacer{flex:1}
+    .hr{height:1px; background:#1c2333; margin:8px 0}
+
+    .legend{display:flex; flex-wrap:wrap; gap:8px}
+    .dot{width:12px; height:12px; border-radius:3px; display:inline-block}
+
+    .kpis{display:grid; grid-template-columns:repeat(5,1fr); gap:6px}
+    .kpi{background:#0d1220; border:1px solid #242b40; border-radius:12px; padding:8px}
+    .kpi .label{font-size:11px; color:var(--muted)}
+    .kpi .value{font-size:14px; font-weight:700}
+
+    canvas{width:100% !important; height:160px !important}
+    .chart-sm canvas{height:120px !important}
+
+    table{width:100%; border-collapse:collapse; font-size:12px}
+    th,td{border-bottom:1px solid #1c2333; padding:6px 8px; text-align:left}
+    th{color:#9fb0cc; font-weight:600}
+    tr:hover td{background:#12182a}
+
+    .avatar{width:28px; height:28px; border-radius:999px; object-fit:cover; background:#222}
+    .avatar-lg{width:36px; height:36px; border-radius:999px; object-fit:cover; background:#222}
+
+    .pill{padding:3px 8px; border-radius:999px; font-size:11px; border:1px solid #2a3246}
+    .ok{color:#b7ffd2; border-color:#1e4530; background:#0b2117}
+    .warn{color:#ffe8b2; border-color:#4e3b19; background:#251a08}
+    .bad{color:#ffd1d1; border-color:#4a1e1e; background:#240909}
+
+    .home{min-height:60vh; display:grid; place-items:center}
+    .homeCard{max-width:720px; width:100%; text-align:center; padding:24px}
+    .homeTitle{font-size:22px; font-weight:800; letter-spacing:.2px}
+    .homeSubtitle{font-size:14px; color:#9fb0cc; margin-top:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="row" style="align-items:center; gap:10px">
+        <div class="brand">
+          <div>Cellule d'Optimisation CN Marseille</div>
+        </div>
+        <div class="row" id="athFilterWrap" style="gap:8px; align-items:center">
+          <img id="athAvatarTop" class="avatar-lg" alt="" style="display:none"/>
+          <span class="tiny muted">Vue :</span>
+          <select class="input" id="athleteFilter" style="max-width:260px"></select>
+        </div>
+      </div>
+      <div class="row" id="dataControls">
+        <button class="btn" id="btnExport">Exporter JSON</button>
+        <label class="btn ghost" for="importJson">Importer JSON</label>
+        <input id="importJson" type="file" accept="application/json" style="display:none" />
+        <button class="btn ghost" id="btnLock" title="Verrouiller">🔒</button>
+      </div>
+    </div>
+
+    <!-- Onglets -->
+    <div class="row tabs" id="tabs"></div>
+
+    <!-- Contenus -->
+    <div id="view"></div>
+
+  </div>
+
+<script>
+/*************************************************
+ *  CONFIG & ÉTAT
+ *************************************************/
+const APP_PASS = 'cnm';
+
+function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+const ZONES = [
+  {key:'vert',   name:'Vert',   color:getCSS('--green')},
+  {key:'bleu',   name:'Bleu',   color:getCSS('--blue')},
+  {key:'orange', name:'Orange', color:getCSS('--orange')},
+  {key:'rouge',  name:'Rouge',  color:getCSS('--red')},
+  {key:'violet', name:'Violet', color:getCSS('--purple')},
+];
+
+const TABS = [
+  {id:'dashboard', label:'Dashboard'},
+  {id:'seances', label:'Séances'},
+  {id:'athletes', label:'Athlètes'},
+  {id:'hrv', label:'HRV'},
+  {id:'poids', label:'Poids'},
+  {id:'competitions', label:'Compétitions'},
+];
+
+let state = loadState();
+let charts = {};
+let selectedAthleteId = loadSelectedAthlete();
+let isUnlocked = loadUnlockFlag();
+
+// Dashboard: choix de semaine (ALL pour saison)
+let dashboardWeek = loadDashboardWeek();
+
+// Aperçu dernier import de compétitions
+let compLastPreview = null;
+
+/*************************************************
+ *  UTILS
+ *************************************************/
+function clone(x){ return JSON.parse(JSON.stringify(x)); }
+function save(){ localStorage.setItem('quantApp_v1', JSON.stringify(state)); }
+function loadState(){
+  const raw = localStorage.getItem('quantApp_v1');
+  if(raw){
+    try { return JSON.parse(raw);} catch(e){ console.warn('JSON corrompu, reset'); }
+  }
+  return { athletes: [], seances: [], hrv: [], poids: [], competitions: [] };
+}
+function loadSelectedAthlete(){ return localStorage.getItem('selectedAthleteId') || 'ALL'; }
+function saveSelectedAthlete(){ localStorage.setItem('selectedAthleteId', selectedAthleteId); }
+
+function loadDashboardWeek(){ return localStorage.getItem('dashboardWeek') || 'ALL'; }
+function saveDashboardWeek(){ localStorage.setItem('dashboardWeek', dashboardWeek); }
+
+function loadUnlockFlag(){ return localStorage.getItem('cnm_unlocked') === '1'; }
+function setUnlockFlag(v){ localStorage.setItem('cnm_unlocked', v?'1':'0'); isUnlocked=v; }
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function fmt(n){ const x = Math.round((Number(n)||0)*100)/100; return String(x).replace('.', ','); }
+function parseNum(v){ const n = parseFloat((v||'').toString().replace(',', '.')); return isNaN(n)?0:n; }
+function toISO(d){ return new Date(d).toISOString().slice(0,10); }
+
+function weekKey(dateStr){
+  const d = new Date(dateStr + 'T12:00:00');
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = new Date(target.getFullYear(),0,4);
+  const diff = target - firstThursday;
+  const week = 1 + Math.round(diff / (7*24*3600*1000));
+  const year = target.getFullYear();
+  return year + '-W' + String(week).padStart(2,'0');
+}
+
+function filteredSessions(athId='ALL'){
+  if(athId==='ALL') return state.seances;
+  return state.seances.filter(s=>Array.isArray(s.presentIds) && s.presentIds.includes(athId));
+}
+function weeksAvailable(athId='ALL'){
+  const set = new Set(filteredSessions(athId).map(s => weekKey(s.date)));
+  return Array.from(set).sort();
+}
+function sumZones(items){
+  const res = {vert:0,bleu:0,orange:0,rouge:0,violet:0, total:0};
+  for(const s of items){ for(const z of ZONES){ res[z.key] += (s.zones?.[z.key]||0); } }
+  res.total = ZONES.reduce((acc,z)=>acc+res[z.key],0);
+  return res;
+}
+function groupByWeek(athId='ALL'){
+  const map = {};
+  for(const s of filteredSessions(athId)){
+    const wk = weekKey(s.date);
+    if(!map[wk]) map[wk] = [];
+    map[wk].push(s);
+  }
+  return map;
+}
+function volByWeek(athId='ALL'){
+  const map = groupByWeek(athId);
+  const weeks = Object.keys(map).sort();
+  return weeks.map(wk=>({week:wk, ...sumZones(map[wk])}));
+}
+function avgByWeek(metricArray){
+  const map = {};
+  for(const r of metricArray){
+    const wk = weekKey(r.date);
+    if(!map[wk]) map[wk] = [];
+    map[wk].push(parseNum(r.value));
+  }
+  const weeks = Object.keys(map).sort();
+  return weeks.map(wk=>({week:wk, avg: map[wk].reduce((a,b)=>a+b,0)/map[wk].length}));
+}
+function lastByWeek(metricArray){
+  // dernier en date (max date) dans la semaine
+  const map = {};
+  for(const r of metricArray){
+    const wk = weekKey(r.date);
+    if(!map[wk]) map[wk] = {date:r.date, value:parseNum(r.value)};
+    else {
+      if(new Date(r.date) > new Date(map[wk].date)){
+        map[wk] = {date:r.date, value:parseNum(r.value)};
+      }
+    }
+  }
+  const weeks = Object.keys(map).sort();
+  return weeks.map(wk=>({week:wk, last: map[wk].value, date: map[wk].date}));
+}
+function pctChange(curr, prev){
+  if(prev === 0) return curr>0 ? 100 : 0;
+  return (curr - prev) / prev * 100;
+}
+function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+function zoneArray(sum){ return ZONES.map(z=>sum[z.key]||0); }
+
+/*************************************************
+ *  VUES (onglets)
+ *************************************************/
+const elTabs = document.getElementById('tabs');
+const elView = document.getElementById('view');
+
+const dataControls = document.getElementById('dataControls');
+const btnLock = document.getElementById('btnLock');
+btnLock.onclick = ()=>{ setUnlockFlag(false); render(); };
+
+function mountAthleteFilter(){
+  const wrap = document.getElementById('athFilterWrap');
+  if(wrap) wrap.style.display = isUnlocked ? 'flex' : 'none';
+
+  const sel = document.getElementById('athleteFilter');
+  const ava = document.getElementById('athAvatarTop');
+  if(!sel) return;
+  const opts = ['<option value="ALL">— Global (tous) —</option>']
+    .concat(state.athletes.map(a=>{
+      const meta = [a.anneeAge||'', a.groupe||''].filter(Boolean).join(' · ');
+      const label = meta? (a.name + ' — ' + meta) : a.name;
+      return '<option value="'+a.id+'">'+label+'</option>';
+    }));
+  sel.innerHTML = opts.join('');
+  sel.value = state.athletes.find(a=>a.id===selectedAthleteId)? selectedAthleteId : 'ALL';
+  sel.onchange = ()=>{ selectedAthleteId = sel.value; saveSelectedAthlete(); render(); };
+
+  // avatar top
+  if(selectedAthleteId!=='ALL'){
+    const a = state.athletes.find(x=>x.id===selectedAthleteId);
+    if(a && a.avatar && a.avatar.data){
+      ava.src = a.avatar.data; ava.style.display = 'block';
+    }else{
+      ava.style.display = 'none'; ava.removeAttribute('src');
+    }
+  }else{
+    ava.style.display = 'none'; ava.removeAttribute('src');
+  }
+}
+
+function mountTabs(){
+  elTabs.innerHTML = '';
+  elTabs.style.display = isUnlocked ? 'flex' : 'none';
+  if(!isUnlocked) return;
+
+  for(const t of TABS){
+    const b = document.createElement('div');
+    b.className = 'tab' + (t.id===currentTab?' active':'');
+    b.textContent = t.label;
+    b.onclick = ()=>switchTab(t.id);
+    elTabs.appendChild(b);
+  }
+  mountAthleteFilter();
+}
+
+let currentTab = 'dashboard';
+function switchTab(id){ currentTab = id; mountTabs(); render(); }
+
+function render(){
+  dataControls.style.display = isUnlocked ? 'flex' : 'none';
+  if(!isUnlocked){ renderHome(); return; }
+
+  if(currentTab==='dashboard') renderDashboard();
+  if(currentTab==='seances') renderSeances();
+  if(currentTab==='athletes') renderAthletes();
+  if(currentTab==='hrv') renderHRV();
+  if(currentTab==='poids') renderPoids();
+  if(currentTab==='competitions') renderCompetitions();
+}
+
+/*************************************************
+ *  ACCUEIL (verrouillage)
+ *************************************************/
+function renderHome(){
+  mountTabs();
+  elView.innerHTML = `
+    <div class="panel home">
+      <div class="homeCard">
+        <div class="homeTitle">Cellule d'optimisation de la performance CN Marseille</div>
+        <div class="homeSubtitle">Accès protégé.</div>
+
+        <div class="grid g3" style="margin-top:14px">
+          <div class="spacer"></div>
+          <input id="home_pwd" class="input" type="password" placeholder="Mot de passe"/>
+          <button id="home_enter" class="btn primary">Entrer</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const pwd = document.getElementById('home_pwd');
+  const go  = document.getElementById('home_enter');
+
+  const tryEnter = ()=>{
+    const val = (pwd.value||'').trim();
+    if(!val) return alert('Entre le mot de passe.');
+    if(val === APP_PASS){
+      setUnlockFlag(true);
+      mountTabs();
+      render();
+      setTimeout(()=>{ pwd.value=''; }, 0);
+    }else{
+      alert('Mot de passe incorrect.');
+      pwd.focus(); pwd.select();
+    }
+  };
+  go.onclick = tryEnter;
+  pwd.onkeydown = (e)=>{ if(e.key==='Enter') tryEnter(); };
+}
+
+/*************************************************
+ *  CHART CONFIG (donut avec % sur parts)
+ *************************************************/
+function pieConfig(values, label){
+  const dataArr = Array.isArray(values) ? values.map(v => Number(v)||0) : [];
+  return {
+    type: 'doughnut',
+    data: {
+      labels: ZONES.map(z=>z.name),
+      datasets: [{
+        data: dataArr,
+        backgroundColor: ZONES.map(z=>z.color),
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx)=> (ctx.label + ': ' + fmt(ctx.raw||0)) } }
+      },
+      cutout: '55%'
+    },
+    plugins:[{
+      id:'labelsOnArc',
+      afterDraw(chart){
+        const {ctx} = chart;
+        const dsMeta = chart.getDatasetMeta(0);
+        const data = chart.data.datasets[0].data;
+        const total = data.reduce((a,b)=>a+b,0);
+        if(!total) return;
+        ctx.save();
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = '#eef3ff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        dsMeta.data.forEach((el, i)=>{
+          const v = data[i];
+          if(!v) return;
+          const p = v/total*100;
+          if(p < 4) return; // évite le fouillis sur très petites parts
+          const pos = el.tooltipPosition();
+          ctx.fillText(Math.round(p)+'%', pos.x, pos.y);
+        });
+        ctx.restore();
+      }
+    }]
+  };
+}
+
+/*************************************************
+ *  DASHBOARD (semaine sélectionnable, % donut, Poids=dernier)
+ *************************************************/
+function renderDashboard(){
+  const weeks = weeksAvailable(selectedAthleteId);
+  // Sanitize dashboardWeek
+  if(dashboardWeek!=='ALL' && !weeks.includes(dashboardWeek)){ dashboardWeek = 'ALL'; saveDashboardWeek(); }
+
+  // Sessions context: saison ou semaine sélectionnée
+  const sessionsCtx = (dashboardWeek==='ALL')
+    ? filteredSessions(selectedAthleteId)
+    : filteredSessions(selectedAthleteId).filter(s=>weekKey(s.date)===dashboardWeek);
+
+  const seasonOrWeekSum = sumZones(sessionsCtx);
+
+  // série hebdo complète pour volume + KPIs
+  const all = volByWeek(selectedAthleteId);
+  const currentWk = (dashboardWeek==='ALL') ? (weeks[weeks.length-1]||null) : dashboardWeek;
+  const prevWk = (currentWk ? weeks[weeks.indexOf(currentWk)-1] : null) || null;
+
+  const thisW = all.find(w=>w.week===currentWk) || {vert:0,bleu:0,orange:0,rouge:0,violet:0,total:0};
+  const prevW = all.find(w=>w.week===prevWk) || {vert:0,bleu:0,orange:0,rouge:0,violet:0,total:0};
+
+  const who = (function(){
+    if(selectedAthleteId==='ALL') return 'Global (tous)';
+    const a = state.athletes.find(x=>x.id===selectedAthleteId);
+    if(!a) return 'Global (tous)';
+    const meta = [a.anneeAge||'', a.groupe||''].filter(Boolean).join(' · ');
+    return meta? (a.name + ' — ' + meta) : a.name;
+  })();
+
+  const aSel = state.athletes.find(x=>x.id===selectedAthleteId);
+  const avaHTML = (aSel && aSel.avatar && aSel.avatar.data) ? `<img class="avatar-lg" src="${aSel.avatar.data}" />` : '';
+
+  elView.innerHTML = ''
+  + '<div class="panel" style="margin-bottom:10px">'
+    + '<div class="row" style="gap:10px; align-items:center">'
+      + (selectedAthleteId==='ALL' ? '' : avaHTML)
+      + '<span class="pill">Vue: '+who+'</span>'
+      + '<div class="row" style="gap:6px; align-items:center">'
+        + '<span class="tiny muted">Semaine affichée:</span>'
+        + '<select id="dashWeek" class="input" style="max-width:200px">'
+          + '<option value="ALL">Toutes (saison)</option>'
+          + weeks.map(w=>'<option value="'+w+'">'+w+'</option>').join('')
+        + '</select>'
+      + '</div>'
+    + '</div>'
+  + '</div>'
+  + '<div class="grid g2">'
+    + '<div class="panel">'
+      + '<div class="row" style="justify-content:space-between">'
+        + '<h2>Répartition zone</h2>'
+        + '<div class="legend" id="zoneLegend"></div>'
+      + '</div>'
+      + '<div class="chart-sm"><canvas id="pieZones"></canvas></div>'
+      + '<div class="tiny muted" style="margin-top:6px">'
+        + 'T.I.D : (Vert+Bleu) / (Orange) / (Rouge+Violet)'
+      + '</div>'
+      + '<div id="tidBox" class="row" style="gap:8px; margin-top:6px; flex-wrap:wrap"></div>'
+      + '<div class="tiny muted note">Données filtrées par athlète '
+        + (dashboardWeek==='ALL' ? '(toute la saison)' : 'et semaine '+dashboardWeek)
+      + '.</div>'
+    + '</div>'
+    + '<div class="panel">'
+      + '<h2>Variation S-1(par zone)</h2>'
+      + '<div class="kpis" id="kpisZones"></div>'
+      + '<div class="hr"></div>'
+      + '<h3 class="tiny muted" style="margin-top:2px">Semaine actuelle: '+(currentWk||'-')+' &nbsp; / &nbsp; Précédente: '+(prevWk||'-')+'</h3>'
+    + '</div>'
+  + '</div>'
+  + '<div class="grid g2" style="margin-top:10px">'
+    + '<div class="panel">'
+      + '<div class="row" style="justify-content:space-between">'
+        + '<h2>Volume</h2>'
+        + '<span class="tiny muted"> • max 32 semaines</span>'
+      + '</div>'
+      + '<canvas id="barVolume"></canvas>'
+    + '</div>'
+    + '<div class="panel">'
+      + '<h2>Métriques</h2>'
+      + '<div class="tiny muted">HRV = moyenne hebdo • Poids = dernier relevé de la semaine</div>'
+      + '<div id="tableMetrics"></div>'
+    + '</div>'
+  + '</div>'
+  + '<div class="panel" style="margin-top:10px">'
+    + '<div class="row" style="justify-content:space-between">'
+      + '<h2>Comparateur A vs B (sélectionne des semaines)</h2>'
+      + '<span class="tiny muted">Totaux par zone + répartition % + évolution B vs A.</span>'
+    + '</div>'
+    + '<div class="grid g2">'
+      + '<div>'
+        + '<div class="tiny muted">Groupe A – semaines</div>'
+        + '<select id="weeksA" class="input" multiple size="6"></select>'
+        + '<div class="hr"></div>'
+        + '<div class="grid g2">'
+          + '<div class="chart-sm"><canvas id="pieA"></canvas></div>'
+          + '<div class="chart-sm"><canvas id="pieB"></canvas></div>'
+        + '</div>'
+      + '</div>'
+      + '<div>'
+        + '<div class="tiny muted">Groupe B – semaines</div>'
+        + '<select id="weeksB" class="input" multiple size="6"></select>'
+        + '<div class="hr"></div>'
+        + '<div class="chart-sm"><canvas id="cmpBar"></canvas></div>'
+      + '</div>'
+    + '</div>'
+    + '<div class="hr"></div>'
+    + '<div id="tablesAB"></div>'
+    + '<div id="evoAB" style="margin-top:8px"></div>'
+  + '</div>';
+
+  // Semaine select
+  const selW = document.getElementById('dashWeek');
+  selW.value = dashboardWeek;
+  selW.onchange = ()=>{ dashboardWeek = selW.value; saveDashboardWeek(); renderDashboard(); };
+
+  // Légende zones
+  document.getElementById('zoneLegend').innerHTML = ZONES.map(z=>(
+    '<span class="chip"><span class="dot" style="background:'+z.color+'"></span>'+z.name+'</span>'
+  )).join('');
+
+  // KPI S-1
+  document.getElementById('kpisZones').innerHTML = ZONES.map(z=>{
+    const change = pctChange(thisW[z.key], prevW[z.key]);
+    const cls = change>5? 'ok' : (change<-5? 'bad':'warn');
+    const arrow = change>0 ? '▲' : (change<0 ? '▼' : '■');
+    return ''
+      + '<div class="kpi '+cls+'">'
+      +   '<div class="label">'+z.name+'</div>'
+      +   '<div class="value">'+arrow+' '+fmt(change)+'%</div>'
+      +   '<div class="tiny muted">S: '+fmt(thisW[z.key])+' · S-1: '+fmt(prevW[z.key])+'</div>'
+      + '</div>';
+  }).join('');
+
+  // Donut + TID
+  const pieEl = document.getElementById('pieZones');
+  if (window.Chart && pieEl) { destroyChart('pieZones'); charts.pieZones = new Chart(pieEl, pieConfig(zoneArray(seasonOrWeekSum))); }
+
+  const totSeason = Number(seasonOrWeekSum.total)||0;
+  const v = Number(seasonOrWeekSum.vert)||0, b = Number(seasonOrWeekSum.bleu)||0;
+  const o = Number(seasonOrWeekSum.orange)||0;
+  const r = Number(seasonOrWeekSum.rouge)||0, p = Number(seasonOrWeekSum.violet)||0;
+
+  const tidLow  = totSeason ? ((v+b)/totSeason*100) : 0;
+  const tidMod  = totSeason ? ( o   /totSeason*100) : 0;
+  const tidHigh = totSeason ? ((r+p)/totSeason*100) : 0;
+
+  const tidBox = document.getElementById('tidBox');
+  if (tidBox){
+    tidBox.innerHTML = ''
+      + '<span class="chip">'
+      +   '<span class="dot" style="background:'+getCSS('--green')+'"></span>'
+      +   '<span class="dot" style="background:'+getCSS('--blue')+'"></span>'
+      +   '<b style="margin-left:4px">Bas</b> '+fmt(tidLow)+'%'
+      + '</span>'
+      + '<span class="chip">'
+      +   '<span class="dot" style="background:'+getCSS('--orange')+'"></span>'
+      +   '<b style="margin-left:4px">Modéré</b> '+fmt(tidMod)+'%'
+      + '</span>'
+      + '<span class="chip">'
+      +   '<span class="dot" style="background:'+getCSS('--red')+'"></span>'
+      +   '<span class="dot" style="background:'+getCSS('--purple')+'"></span>'
+      +   '<b style="margin-left:4px">Élevé</b> '+fmt(tidHigh)+'%'
+      + '</span>';
+  }
+
+  // Volume hebdo (32 dernières)
+  const capped = all.slice(-32);
+  const barEl = document.getElementById('barVolume');
+  if (window.Chart && barEl) {
+    destroyChart('barVolume');
+    charts.barVolume = new Chart(barEl, {
+      type:'bar',
+      data:{
+        labels: capped.map(r=>r.week),
+        datasets:[{
+          label:'Volume total',
+          data: capped.map(r=>r.total),
+          backgroundColor:'#1d61a7',
+          borderWidth:0,
+          barPercentage:0.45,
+          categoryPercentage:0.6,
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false} },
+        scales:{ x:{ ticks:{maxRotation:0, autoSkip:true}}, y:{ beginAtZero:true} }
+      }
+    });
+  }
+
+  // Tableau métriques : HRV moyenne, Poids = dernier
+  const metricHRV = state.hrv.filter(r=> selectedAthleteId==='ALL' ? true : r.athleteId===selectedAthleteId);
+  const metricW   = state.poids.filter(r=> selectedAthleteId==='ALL' ? true : r.athleteId===selectedAthleteId);
+  const avgHRVArr = avgByWeek(metricHRV);
+  const lastWArr  = lastByWeek(metricW);
+  const row = (wk)=>{
+    const vTot = all.find(x=>x.week===wk)?.total || 0;
+    const h = avgHRVArr.find(x=>x.week===wk)?.avg || 0;
+    const pw = lastWArr.find(x=>x.week===wk)?.last || 0;
+    return '<tr><td>'+wk+'</td><td>'+fmt(vTot)+'</td><td>'+fmt(h)+'</td><td>'+fmt(pw)+'</td></tr>';
+  };
+  document.getElementById('tableMetrics').innerHTML =
+    '<table><thead><tr><th>Semaine</th><th>Volume</th><th>HRV moy.</th><th>Poids (dern.)</th></tr></thead>'
+    + '<tbody>'+all.slice(-16).map(r=>row(r.week)).join('')+'</tbody></table>';
+
+  // Comparateur A/B
+  const elA = document.getElementById('weeksA');
+  const elB = document.getElementById('weeksB');
+  elA.innerHTML = weeks.map(w=>'<option value="'+w+'">'+w+'</option>').join('');
+  elB.innerHTML = weeks.map(w=>'<option value="'+w+'">'+w+'</option>').join('');
+
+  function readSel(el){ return Array.from(el.selectedOptions).map(o=>o.value); }
+  const mapW = groupByWeek(selectedAthleteId);
+  function computeFor(sel){ const items = sel.flatMap(w=>mapW[w]||[]); return sumZones(items); }
+  function refreshAB(){
+    const A = computeFor(readSel(elA));
+    const B = computeFor(readSel(elB));
+
+    const pieA = document.getElementById('pieA');
+    const pieB = document.getElementById('pieB');
+    const cmpBar = document.getElementById('cmpBar');
+
+    if (window.Chart && pieA) { destroyChart('pieA'); charts.pieA = new Chart(pieA, pieConfig(zoneArray(A), 'A')); }
+    if (window.Chart && pieB) { destroyChart('pieB'); charts.pieB = new Chart(pieB, pieConfig(zoneArray(B), 'B')); }
+    if (window.Chart && cmpBar) {
+      destroyChart('cmpBar');
+      charts.cmpBar = new Chart(cmpBar, {
+        type:'bar',
+        data:{
+          labels: ZONES.map(z=>z.name),
+          datasets:[
+            {label:'A', data: ZONES.map(z=>A[z.key]), backgroundColor:'#1d61a7', barPercentage:0.45, categoryPercentage:0.6},
+            {label:'B', data: ZONES.map(z=>B[z.key]), backgroundColor:'#7a55c9', barPercentage:0.45, categoryPercentage:0.6},
+          ]
+        },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{}, scales:{ y:{beginAtZero:true} } }
+      });
+    }
+
+    // Tables A et B + Évolution B vs A
+    const tbl = (obj)=>{
+      const tot = ZONES.reduce((acc,z)=>acc+obj[z.key],0) || 0;
+      const rows = ZONES.map(z=>{
+        const v = obj[z.key]; const p = tot? (v/tot*100):0;
+        return '<tr><td><span class="dot" style="background:'+z.color+'"></span> '+z.name+'</td><td>'+fmt(v)+'</td><td>'+fmt(p)+'%</td></tr>';
+      }).join('');
+      return '<table><thead><tr><th>Zone</th><th>Total</th><th>%</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><th>Total</th><th>'+fmt(tot)+'</th><th>100%</th></tr></tfoot></table>';
+    };
+    document.getElementById('tablesAB').innerHTML = '<div class="grid g2"><div>'+tbl(A)+'</div><div>'+tbl(B)+'</div></div>';
+
+    // Évolution B vs A par zone + total
+    const evoRows = (()=>{
+      const totalA = ZONES.reduce((acc,z)=>acc+(A[z.key]||0),0);
+      const totalB = ZONES.reduce((acc,z)=>acc+(B[z.key]||0),0);
+      const zoneLines = ZONES.map(z=>{
+        const a = A[z.key]||0; const b = B[z.key]||0;
+        const ch = pctChange(b,a);
+        const arrow = ch>0?'▲':(ch<0?'▼':'■');
+        return '<tr><td>'+z.name+'</td><td>'+fmt(a)+'</td><td>'+fmt(b)+'</td><td>'+arrow+' '+fmt(ch)+'%</td></tr>';
+      }).join('');
+      const totalCh = pctChange(totalB, totalA);
+      const totalArrow = totalCh>0?'▲':(totalCh<0?'▼':'■');
+      const totalLine = '<tr><th>Total</th><th>'+fmt(totalA)+'</th><th>'+fmt(totalB)+'</th><th>'+totalArrow+' '+fmt(totalCh)+'%</th></tr>';
+      return zoneLines + totalLine;
+    })();
+    document.getElementById('evoAB').innerHTML =
+      '<table><thead><tr><th>Zone</th><th>A</th><th>B</th><th>Évolution B vs A</th></tr></thead><tbody>'+evoRows+'</tbody></table>';
+  }
+  elA.onchange = refreshAB; elB.onchange = refreshAB; refreshAB();
+}
+
+/*************************************************
+ *  SÉANCES (aperçu pièce jointe)
+ *************************************************/
+function renderSeances(){
+  const athletes = state.athletes;
+  const list = state.seances.slice().sort((a,b)=>a.date<b.date?1:-1);
+
+  elView.innerHTML = ''
+    + '<div class="panel">'
+    +   '<h2>Nouvelle séance</h2>'
+    +   '<div class="grid g4" style="margin-top:8px">'
+    +     '<div><div class="tiny muted">Date</div><input class="input" type="date" id="s_date" /></div>'
+    +     '<div><div class="tiny muted">AM/PM</div>'
+    +       '<select class="input" id="s_ampm"><option>AM</option><option>PM</option></select>'
+    +     '</div>'
+    +     '<div><div class="tiny muted">Thème</div><input class="input" id="s_theme"></div>'
+    +     '<div><div class="tiny muted">Sprints</div><input class="input" id="s_sprints" type="number" min="0" step="1"/></div>'
+    +   '</div>'
+    +   '<div class="grid" style="display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:8px">'
+    +     ZONES.map(z=>'<div><div class="tiny muted">'+z.name+'</div><input class="input" data-z="'+z.key+'" type="number" min="0" step="0.1"/></div>').join('')
+    +   '</div>'
+    +   '<div class="grid g2" style="margin-top:8px">'
+    +     '<div>'
+    +       '<div class="tiny muted">Athlètes présents</div>'
+    +       '<div id="s_present" class="row" style="gap:10px; flex-wrap:wrap"></div>'
+    +     '</div>'
+    +     '<div>'
+    +       '<div class="tiny muted">Pièce jointe</div>'
+    +       '<input class="input" id="s_file" type="file" />'
+    +       '<div class="tiny muted">Commentaire</div>'
+    +       '<textarea class="input" id="s_comment" rows="3"></textarea>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="row" style="margin-top:8px">'
+    +     '<div class="spacer"></div>'
+    +     '<button class="btn primary" id="btnAddSeance">Ajouter la séance</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="panel" style="margin-top:10px">'
+    +   '<h2>Historique des séances</h2>'
+    +   '<table id="tblSeances"><thead><tr>'
+    +     '<th>Date</th><th>AM/PM</th><th>Thème</th><th>Total</th>'
+    +     + ZONES.map(z=>'<th>'+z.name+'</th>').join('')
+    +     + '<th>Sprints</th><th>Présents</th><th>Pièce jointe</th><th></th>'
+    +   '</tr></thead><tbody></tbody></table>'
+    +   '<div id="previewArea" class="panel" style="margin-top:10px; display:none;"></div>'
+    + '</div>';
+
+  const presentBox = document.getElementById('s_present');
+  presentBox.innerHTML = athletes.map(a=>{
+    const meta = [a.anneeAge||'', a.groupe||''].filter(Boolean).join(' · ');
+    const label = meta? (a.name + ' — ' + meta) : a.name;
+    return '<label class="chip"><input type="checkbox" value="'+a.id+'"/> '+label+'</label>';
+  }).join('');
+
+  document.getElementById('btnAddSeance').onclick = async ()=>{
+    const date = document.getElementById('s_date').value || toISO(new Date());
+    const ampm = document.getElementById('s_ampm').value;
+    const theme = document.getElementById('s_theme').value.trim();
+    const sprints = parseInt(document.getElementById('s_sprints').value||'0');
+    const zInputs = Array.from(document.querySelectorAll('[data-z]'));
+    const zones = {}; let total = 0;
+    for(const inp of zInputs){ const k = inp.getAttribute('data-z'); const v = parseNum(inp.value); zones[k]=v; total+=v; }
+
+    const file = document.getElementById('s_file').files[0];
+    let attach = null;
+    if(file){
+      const r = await fileToDataURL(file);
+      attach = r;
+    }
+
+    const presentIds = Array.from(presentBox.querySelectorAll('input:checked')).map(i=>i.value);
+    const comment = document.getElementById('s_comment').value.trim();
+
+    state.seances.push({id:uid(), date, ampm, theme, zones, total, sprints, presentIds, comment, attachment:attach});
+    save();
+    renderSeances();
+  };
+
+  const tbody = elView.querySelector('#tblSeances tbody');
+  tbody.innerHTML = list.map(s=>{
+    const pres = s.presentIds.map(id=>{
+      const a = athletes.find(a=>a.id===id);
+      if(!a) return '—';
+      const meta = [a.anneeAge||'', a.groupe||''].filter(Boolean).join(' · ');
+      return meta? (a.name + ' — ' + meta) : a.name;
+    }).join(', ');
+    const link = s.attachment
+      ? (s.attachment.data
+          ? '<a href="'+s.attachment.data+'" target="_blank" rel="noopener">ouvrir</a>'
+          : (s.attachment.name||''))
+      : '';
+    const canPreview = !!(s.attachment && s.attachment.data && (
+      (s.attachment.type||'').startsWith('image/') ||
+      (s.attachment.type||'').startsWith('application/pdf') ||
+      (s.attachment.type||'').startsWith('audio/') ||
+      (s.attachment.type||'').startsWith('video/')
+    ));
+    const previewBtn = canPreview ? '<button class="btn tiny" data-preview="'+s.id+'">Aperçu</button>' : '';
+
+    return ''
+      + '<tr>'
+      +   '<td>'+s.date+'</td><td>'+s.ampm+'</td><td>'+(s.theme||'')+'</td>'
+      +   '<td>'+fmt(sumZones([s]).total)+'</td>'
+      +   ZONES.map(z=>'<td>'+fmt(s.zones[z.key]||0)+'</td>').join('')
+      +   '<td>'+(s.sprints||0)+'</td>'
+      +   '<td>'+pres+'</td>'
+      +   '<td>'+link+' '+previewBtn+'</td>'
+      +   '<td><button class="btn tiny" data-del="'+s.id+'">Suppr.</button></td>'
+      + '</tr>';
+  }).join('');
+
+  tbody.querySelectorAll('[data-del]').forEach(b=>{
+    b.onclick = ()=>{ state.seances = state.seances.filter(s=>s.id!==b.getAttribute('data-del')); save(); renderSeances(); };
+  });
+
+  tbody.querySelectorAll('[data-preview]').forEach(b=>{
+    b.onclick = ()=>{
+      const id = b.getAttribute('data-preview');
+      const s = list.find(x=>x.id===id);
+      const p = document.getElementById('previewArea');
+      if(!s || !s.attachment || !s.attachment.data){ p.style.display='none'; p.innerHTML=''; return; }
+      const t = s.attachment.type||'';
+      let html='';
+      if(t.startsWith('image/')) html = '<img src="'+s.attachment.data+'" style="max-width:100%; border-radius:8px"/>';
+      else if(t.startsWith('application/pdf')) html = '<iframe src="'+s.attachment.data+'" style="width:100%; height:480px; border:0; border-radius:8px"></iframe>';
+      else if(t.startsWith('audio/')) html = '<audio controls src="'+s.attachment.data+'" style="width:100%"></audio>';
+      else if(t.startsWith('video/')) html = '<video controls src="'+s.attachment.data+'" style="width:100%; max-height:480px; border-radius:8px"></video>';
+      else html = '<div class="tiny muted">Type non prévisualisable. Utilise le lien “ouvrir”.</div>';
+      p.innerHTML = '<h3 style="margin:0 0 8px 0">Aperçu pièce jointe</h3>'+html;
+      p.style.display = 'block';
+      p.scrollIntoView({behavior:'smooth', block:'start'});
+    };
+  });
+}
+
+/*************************************************
+ *  ATHLÈTES
+ *************************************************/
+function renderAthletes(){
+  elView.innerHTML = ''
+    + '<div class="panel">'
+    +   '<h2>Ajouter un athlète</h2>'
+    +   '<div class="grid g3" style="margin-top:8px">'
+    +     '<div><div class="tiny muted">Nom</div><input class="input" id="a_name"/></div>'
+    +     '<div><div class="tiny muted">Année d\'âge</div><input class="input" id="a_age"/></div>'
+    +     '<div><div class="tiny muted">Groupe</div><input class="input" id="a_group"/></div>'
+    +   '</div>'
+    +   '<div class="grid g3" style="margin-top:8px">'
+    +     '<div><div class="tiny muted">Avatar (optionnel)</div><input class="input" id="a_avatar" type="file" accept="image/*"/></div>'
+    +     '<div></div>'
+    +     '<div class="row" style="align-items:flex-end; justify-content:flex-end"><button class="btn primary" id="btnAddAthlete">Ajouter</button></div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="panel" style="margin-top:10px">'
+    +   '<h2>Liste des athlètes</h2>'
+    +   '<table id="tblAth"><thead><tr><th></th><th>Nom</th><th>Année d\'âge</th><th>Groupe</th><th></th></tr></thead><tbody></tbody></table>'
+    + '</div>';
+
+  document.getElementById('btnAddAthlete').onclick = async ()=>{
+    const name = document.getElementById('a_name').value.trim();
+    if(!name) return alert('Nom requis');
+    const anneeAge = (document.getElementById('a_age').value||'').trim();
+    const groupe = (document.getElementById('a_group').value||'').trim();
+    const file = document.getElementById('a_avatar').files[0];
+    let avatar = null;
+    if(file){ avatar = await fileToDataURL(file); }
+    state.athletes.push({id:uid(), name, anneeAge, groupe, avatar}); save(); mountAthleteFilter(); renderAthletes();
+  };
+
+  const tbody = elView.querySelector('#tblAth tbody');
+  tbody.innerHTML = state.athletes.map(a=>(
+    '<tr>'
+    + '<td>'+(a.avatar? ('<img class="avatar" src="'+a.avatar.data+'" />') : '<div class="avatar"></div>')+'</td>'
+    + '<td>'+(a.name||'')+'</td>'
+    + '<td>'+(a.anneeAge||'')+'</td>'
+    + '<td>'+(a.groupe||'')+'</td>'
+    + '<td><button class="btn tiny" data-del="'+a.id+'">Suppr.</button></td>'
+    + '</tr>'
+  )).join('');
+
+  tbody.querySelectorAll('[data-del]').forEach(b=>{
+    b.onclick = ()=>{ state.athletes = state.athletes.filter(x=>x.id!==b.getAttribute('data-del')); save(); mountAthleteFilter(); renderAthletes(); };
+  });
+}
+
+/*************************************************
+ *  HRV & POIDS (Poids: pas d'import)
+ *************************************************/
+function renderHRV(){ renderMetric('HRV', 'hrv'); }
+function renderPoids(){ renderMetric('Poids', 'poids'); }
+
+function renderMetric(label, key){
+  const rows = state[key]
+    .filter(r=> selectedAthleteId==='ALL' ? true : r.athleteId===selectedAthleteId)
+    .sort((a,b)=>a.date<b.date?1:-1);
+
+  const who = (function(){
+    if(selectedAthleteId==='ALL') return 'Global (tous)';
+    const a = state.athletes.find(x=>x.id===selectedAthleteId);
+    if(!a) return 'Global (tous)';
+    const meta = [a.anneeAge||'', a.groupe||''].filter(Boolean).join(' · ');
+    return meta? (a.name + ' — ' + meta) : a.name;
+  })();
+
+  const allowImport = (key !== 'poids');
+
+  elView.innerHTML = ''
+    + '<div class="panel">'
+    +   '<h2>'+label+'</h2>'
+    +   '<div class="tiny muted">Vue: '+who+'</div>'
+    +   '<div class="grid g3" style="margin-top:8px">'
+    +     '<div><div class="tiny muted">Date</div><input class="input" id="m_date" type="date"/></div>'
+    +     '<div><div class="tiny muted">Valeur</div><input class="input" id="m_value" type="number" step="0.01"/></div>'
+    +     '<div class="row" style="align-items:flex-end"><button class="btn primary" id="btnAddMetric">Ajouter</button></div>'
+    +   '</div>'
+    +   (allowImport ? ('<div class="hr"></div>'
+    +   '<div class="row" style="gap:8px; align-items:center">'
+    +     '<input id="fileCSV" type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"/>'
+    +     '<button class="btn" id="btnImport">Importer CSV/XLSX</button>'
+    +     '<span class="tiny muted">Colonnes attendues: <code>date</code>, <code>value</code>.</span>'
+    +   '</div>') : '')
+    + '</div>'
+    + '<div class="panel" style="margin-top:10px">'
+    +   '<table><thead><tr><th>Date</th><th>'+label+'</th><th></th></tr></thead><tbody id="tbodyM"></tbody></table>'
+    + '</div>';
+
+  const btnAdd = document.getElementById('btnAddMetric');
+  const btnImp = document.getElementById('btnImport');
+  const disabled = (selectedAthleteId==='ALL');
+  btnAdd.disabled = disabled;
+  if(btnImp) btnImp.disabled = disabled;
+  if(disabled){
+    btnAdd.title = 'Choisis un athlète en haut pour saisir.';
+    if(btnImp) btnImp.title = 'Choisis un athlète en haut pour importer.';
+  }
+
+  btnAdd.onclick = ()=>{
+    if(selectedAthleteId==='ALL') return alert('Choisis un athlète via le sélecteur en haut.');
+    const date = document.getElementById('m_date').value || toISO(new Date());
+    const value = parseNum(document.getElementById('m_value').value);
+    state[key].push({id:uid(), athleteId:selectedAthleteId, date, value}); save(); renderMetric(label,key);
+  };
+
+  if (allowImport && btnImp){
+    btnImp.onclick = ()=>{
+      if(selectedAthleteId==='ALL') return alert('Choisis un athlète via le sélecteur en haut.');
+      const f = document.getElementById('fileCSV').files[0];
+      if(!f) return alert('Choisis un fichier .csv ou .xlsx');
+      importMetricFile(f, key);
+    };
+  }
+
+  const tb = document.getElementById('tbodyM');
+  tb.innerHTML = rows.map(r=>'<tr><td>'+r.date+'</td><td>'+fmt(r.value)+'</td><td><button class="btn tiny" data-del="'+r.id+'">Suppr.</button></td></tr>').join('');
+  tb.querySelectorAll('[data-del]').forEach(b=>{
+    b.onclick = ()=>{ state[key] = state[key].filter(x=>x.id!==b.getAttribute('data-del')); save(); renderMetric(label,key); };
+  });
+}
+
+function importMetricFile(file, key){
+  const ext = file.name.split('.').pop().toLowerCase();
+  if(ext==='csv'){
+    const r = new FileReader(); r.onload = ()=>{
+      const lines = r.result.split(/\r?\n/).filter(x=>x.trim());
+      const head = (lines.shift()||'').split(',').map(s=>s.trim().toLowerCase());
+      const idxDate = head.indexOf('date'); const idxVal = head.indexOf('value');
+      if(idxDate===-1||idxVal===-1) return alert('Colonnes requises: date,value');
+      for(const line of lines){
+        const cells = line.split(',');
+        const date = toISO(new Date(cells[idxDate]));
+        const value = parseNum(cells[idxVal]);
+        if(date && !isNaN(value)) state[key].push({id:uid(), athleteId:selectedAthleteId, date, value});
+      }
+      save(); render();
+    }; r.readAsText(file);
+  } else {
+    const r = new FileReader(); r.onload = (e)=>{
+      const wb = XLSX.read(e.target.result, {type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, {header:1});
+      const head = (json[0]||[]).map(s=>String(s).toLowerCase());
+      const idxDate = head.indexOf('date'); const idxVal = head.indexOf('value');
+      if(idxDate===-1||idxVal===-1) return alert('Colonnes requises: date,value');
+      for(let i=1;i<json.length;i++){
+        const row = json[i]; if(!row || row.length===0) continue;
+        const date = toISO(new Date(row[idxDate]));
+        const value = parseNum(row[idxVal]);
+        if(date && !isNaN(value)) state[key].push({id:uid(), athleteId:selectedAthleteId, date, value});
+      }
+      save(); render();
+    };
+    r.readAsBinaryString(file);
+  }
+}
+
+/*************************************************
+ *  COMPÉTITIONS (import + aperçu direct)
+ *************************************************/
+function renderCompetitions(){
+  const rows = state.competitions.slice().sort((a,b)=>a.date<b.date?1:-1);
+  elView.innerHTML = ''
+    + '<div class="panel">'
+    +   '<h2>Ajouter une compétition</h2>'
+    +   '<div class="grid g3" style="margin-top:8px">'
+    +     '<div><div class="tiny muted">Date</div><input id="c_date" class="input" type="date"/></div>'
+    +     '<div><div class="tiny muted">Nom</div><input id="c_name" class="input"/></div>'
+    +     '<div><div class="tiny muted">Lieu</div><input id="c_loc" class="input"/></div>'
+    +   '</div>'
+    +   '<div class="grid g1" style="margin-top:8px">'
+    +     '<div><div class="tiny muted">Notes</div><textarea id="c_note" class="input" rows="3"></textarea></div>'
+    +   '</div>'
+    +   '<div class="row" style="margin-top:8px"><div class="spacer"></div><button class="btn primary" id="btnAddComp">Ajouter</button></div>'
+    +   '<div class="hr"></div>'
+    +   '<div class="row" style="gap:8px; align-items:center">'
+    +     '<input id="comp_file" type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"/>'
+    +     '<button class="btn" id="btnCompImport">Importer Excel/CSV</button>'
+    +     '<span class="tiny muted">Colonnes: <code>date</code>, <code>nom|name</code>, <code>lieu|loc</code>, <code>notes|note</code></span>'
+    +   '</div>'
+    +   '<div id="compPreview" class="panel" style="margin-top:10px; display:none;">'
+    +     '<h3 style="margin:0 0 8px 0">Aperçu du fichier importé</h3>'
+    +     '<div id="compPreviewInner" style="overflow:auto; max-height:380px"></div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="panel" style="margin-top:10px">'
+    +   '<h2>Compétitions</h2>'
+    +   '<table><thead><tr><th>Date</th><th>Nom</th><th>Lieu</th><th>Notes</th><th></th></tr></thead><tbody id="tbodyC"></tbody></table>'
+    + '</div>';
+
+  document.getElementById('btnAddComp').onclick = ()=>{
+    const date = document.getElementById('c_date').value || toISO(new Date());
+    const name = document.getElementById('c_name').value.trim();
+    const loc  = document.getElementById('c_loc').value.trim();
+    const note = document.getElementById('c_note').value.trim();
+    state.competitions.push({id:uid(), date, name, loc, note}); save(); renderCompetitions();
+  };
+
+  const file = document.getElementById('comp_file');
+  const btnImport = document.getElementById('btnCompImport');
+
+  const doImport = ()=>{
+    const f = file.files[0];
+    if(!f) return alert('Choisis un fichier .csv ou .xlsx');
+    importCompetitionsFile(f);
+  };
+  btnImport.onclick = doImport;
+  file.onchange = ()=>{ if(file.files[0]) doImport(); };
+
+  const tb = document.getElementById('tbodyC');
+  tb.innerHTML = rows.map(r=>'<tr><td>'+r.date+'</td><td>'+(r.name||'')+'</td><td>'+(r.loc||'')+'</td><td>'+(r.note||'')+'</td><td><button class="btn tiny" data-del="'+r.id+'">Suppr.</button></td></tr>').join('');
+  tb.querySelectorAll('[data-del]').forEach(b=>{
+    b.onclick = ()=>{ state.competitions = state.competitions.filter(x=>x.id!==b.getAttribute('data-del')); save(); renderCompetitions(); };
+  });
+
+  // Affiche l’aperçu si dispo
+  if (compLastPreview && Array.isArray(compLastPreview) && compLastPreview.length){
+    const box = document.getElementById('compPreview');
+    const inner = document.getElementById('compPreviewInner');
+    if (box && inner){
+      box.style.display = 'block';
+      renderMatrixTable('compPreviewInner', compLastPreview);
+    }
+  }
+}
+
+function importCompetitionsFile(file){
+  const ext = file.name.split('.').pop().toLowerCase();
+  if(ext==='csv'){
+    const r = new FileReader(); r.onload = ()=>{
+      const linesRaw = r.result.split(/\r?\n/).filter(x=>x.trim().length>0);
+      if(linesRaw.length===0) return;
+      const guessSep = (s)=> (s.includes(';') && !s.includes(',')) ? ';' : ',';
+      const sep = guessSep(linesRaw[0]);
+      const headRaw = (linesRaw.shift()||'').split(sep);
+      const matrix = [headRaw].concat(linesRaw.map(line=>line.split(sep)));
+      compLastPreview = matrix;
+
+      const head = headRaw.map(s=>normalizeHeader(s));
+      const idx = headerIdxMap(head);
+      if(idx.date<0 || idx.name<0) return alert('Colonnes requises: date + nom/name (lieu/notes optionnels)');
+
+      for(const row of matrix.slice(1)){
+        const date = toISO(new Date(row[idx.date]||''));
+        const name = (row[idx.name]||'').trim();
+        const loc  = idx.loc>=0 ? (row[idx.loc]||'').trim() : '';
+        const note = idx.note>=0 ? (row[idx.note]||'').trim() : '';
+        if(name){ state.competitions.push({id:uid(), date: date || toISO(new Date()), name, loc, note}); }
+      }
+      save(); renderCompetitions();
+    }; r.readAsText(file);
+  } else {
+    const r = new FileReader(); r.onload = (e)=>{
+      const wb = XLSX.read(e.target.result, {type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(json.length===0) return;
+      compLastPreview = json;
+
+      const head = (json[0]||[]).map(s=>normalizeHeader(String(s)));
+      const idx = headerIdxMap(head);
+      if(idx.date<0 || idx.name<0) return alert('Colonnes requises: date + nom/name (lieu/notes optionnels)');
+
+      for(let i=1;i<json.length;i++){
+        const row = json[i]; if(!row || row.length===0) continue;
+        const date = toISO(new Date(row[idx.date]||''));
+        const name = String(row[idx.name]||'').trim();
+        const loc  = idx.loc>=0 ? String(row[idx.loc]||'').trim() : '';
+        const note = idx.note>=0 ? String(row[idx.note]||'').trim() : '';
+        if(name){ state.competitions.push({id:uid(), date: date || toISO(new Date()), name, loc, note}); }
+      }
+      save(); renderCompetitions();
+    };
+    r.readAsBinaryString(file);
+  }
+}
+
+function normalizeHeader(h){
+  return String(h).toLowerCase().trim()
+    .replace(/\s+/g,'')
+    .replace(/[éèêë]/g,'e').replace(/[àâä]/g,'a').replace(/[îï]/g,'i')
+    .replace(/[ôö]/g,'o').replace(/[ùûü]/g,'u');
+}
+function headerIdxMap(headArr){
+  const idx = {date:-1, name:-1, loc:-1, note:-1};
+  headArr.forEach((h,i)=>{
+    if(h.includes('date')) idx.date = (idx.date<0? i: idx.date);
+    if(h==='nom' || h==='name' || h.includes('intitule')) idx.name = (idx.name<0? i: idx.name);
+    if(h==='lieu' || h==='loc') idx.loc = (idx.loc<0? i: idx.loc);
+    if(h==='notes' || h==='note' || h==='commentaire' || h==='comments') idx.note = (idx.note<0? i: idx.note);
+  });
+  return idx;
+}
+
+/*************************************************
+ *  EXPORT / IMPORT JSON
+ *************************************************/
+const btnExport = document.getElementById('btnExport');
+const inpImport = document.getElementById('importJson');
+btnExport.onclick = ()=>{
+  const blob = new Blob([JSON.stringify(state)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download = 'quantification_data.json'; a.click(); URL.revokeObjectURL(url);
+};
+
+inpImport.onchange = ()=>{
+  const f = inpImport.files[0]; if(!f) return;
+  const r = new FileReader(); r.onload = ()=>{
+    try{
+      const data = JSON.parse(r.result);
+      state = Object.assign({athletes:[], seances:[], hrv:[], poids:[], competitions:[]}, data);
+      save();
+      render();
+      alert('Import OK.');
+    }catch(e){ alert('JSON invalide'); }
+  }; r.readAsText(f);
+};
+
+/*************************************************
+ *  HELPERS
+ *************************************************/
+function fileToDataURL(file){
+  return new Promise((resolve)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve({name:file.name, type:file.type, size:file.size, data:r.result});
+    r.readAsDataURL(file);
+  });
+}
+
+function renderMatrixTable(containerId, matrix){
+  const root = document.getElementById(containerId);
+  if(!root) return;
+  const esc = (s)=> String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const thead = (matrix[0]||[]).map(c=>`<th>${esc(c)}</th>`).join('');
+  const tbody = matrix.slice(1).map(row=>`<tr>${
+    row.map(c=>`<td>${esc(c)}</td>`).join('')
+  }</tr>`).join('');
+
+  root.innerHTML = `
+    <div style="overflow:auto">
+      <table>
+        <thead><tr>${thead}</tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+/*************************************************
+ *  BOOT
+ *************************************************/
+function boot(){
+  mountTabs();
+  render();
+}
+if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
+</script>
+</body>
+</html>
+
+
