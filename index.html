@@ -1256,6 +1256,76 @@ function boot(){
 }
 if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
 </script>
+
+<script>
+
+/* === Athlete filter (dropdowns) === */
+let selectedAthleteId = window.selectedAthleteId || 'ALL';
+function mountAthleteFilter() {
+  const selects = [
+    document.getElementById('hpAth'),
+    document.getElementById('athFilter'),
+    document.getElementById('selectAthlete')
+  ].filter(Boolean);
+
+  selects.forEach(sel => {
+    const prev = sel.value;
+    sel.innerHTML =
+      `<option value="ALL">Tous les athlètes</option>` +
+      (state.athletes || []).map(a => {
+        const meta = [a.anneeAge || '', a.groupe || ''].filter(Boolean).join(' · ');
+        const label = meta ? `${a.name} — ${meta}` : a.name;
+        return `<option value="${a.id}">${label}</option>`;
+      }).join('');
+
+    const target =
+      (prev && [...sel.options].some(o => o.value === prev)) ? prev :
+      ([...sel.options].some(o => o.value === selectedAthleteId) ? selectedAthleteId : 'ALL');
+
+    sel.value = target;
+    selectedAthleteId = target;
+
+    sel.onchange = (e) => {
+      selectedAthleteId = e.target.value;
+      if (typeof renderVueDEnsemble === 'function') renderVueDEnsemble();
+      if (typeof renderHRV === 'function') renderHRV();
+      if (typeof renderPoids === 'function') renderPoids();
+      if (typeof renderSeances === 'function') renderSeances();
+    };
+  });
+
+  window.selectedAthleteId = selectedAthleteId;
+}
+
+
+/* === Initial sync + filter + realtime refresh === */
+window.addEventListener('load', async () => {
+  try {
+    if (typeof syncStateFromSupabase === 'function') {
+      await syncStateFromSupabase();
+    }
+    if (typeof mountAthleteFilter === 'function') mountAthleteFilter();
+    if (typeof render === 'function') render();
+    if (typeof mountTabs === 'function') mountTabs();
+  } catch (e) { console.warn(e); }
+
+  try {
+    if (window.supabaseClient && window.supabaseClient.channel) {
+      window.supabaseClient
+        .channel('rt-athletes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'athletes' }, async () => {
+          try {
+            if (typeof syncStateFromSupabase === 'function') await syncStateFromSupabase();
+            if (typeof mountAthleteFilter === 'function') mountAthleteFilter();
+            if (typeof renderAthletes === 'function') renderAthletes();
+          } catch(e) { console.warn('rt-athletes refresh failed:', e); }
+        })
+        .subscribe();
+    }
+  } catch(e) { console.warn('realtime init failed:', e); }
+});
+
+</script>
 </body>
 </html>
 
