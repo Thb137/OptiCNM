@@ -1326,6 +1326,97 @@ window.addEventListener('load', async () => {
 });
 
 </script>
+
+<script>
+/* === PATCH v2: filtre athlète + réactualisation agressive === */
+var selectedAthleteId = window.selectedAthleteId || 'ALL';
+function mountAthleteFilter() {
+  const selects = [
+    document.getElementById('hpAth'),
+    document.getElementById('athFilter'),
+    document.getElementById('selectAthlete')
+  ].filter(Boolean);
+
+  selects.forEach(sel => {
+    const prev = sel.value;
+    sel.innerHTML =
+      `<option value="ALL">Tous les athlètes</option>` +
+      (window.state && state.athletes ? state.athletes : []).map(a => {
+        const meta = [a.anneeAge || '', a.groupe || ''].filter(Boolean).join(' · ');
+        const label = meta ? `${a.name} — ${meta}` : a.name;
+        return `<option value="${a.id}">${label}</option>`;
+      }).join('');
+
+    const target =
+      (prev && [...sel.options].some(o => o.value === prev)) ? prev :
+      ([...sel.options].some(o => o.value === selectedAthleteId) ? selectedAthleteId : 'ALL');
+
+    sel.value = target;
+    selectedAthleteId = target;
+
+    sel.onchange = (e) => {
+      selectedAthleteId = e.target.value;
+      window.selectedAthleteId = selectedAthleteId;
+      if (typeof renderVueDEnsemble === 'function') renderVueDEnsemble();
+      if (typeof renderDashboard === 'function') renderDashboard();
+      if (typeof renderHRV === 'function') renderHRV();
+      if (typeof renderPoids === 'function') renderPoids();
+      if (typeof renderSeances === 'function') renderSeances();
+      if (typeof renderAthletes === 'function') renderAthletes();
+    };
+  });
+
+  window.selectedAthleteId = selectedAthleteId;
+}
+
+/* Monkey-patch: re-monter le filtre après CHAQUE rendu connu */
+(function(){
+  const names = ['render','renderAthletes','renderVueDEnsemble','renderDashboard','renderHRV','renderPoids','renderSeances','renderCompetitions'];
+  names.forEach(name => {
+    const fn = window[name];
+    if (typeof fn === 'function' && !fn.__patched_for_filter__) {
+      const wrap = async function(...args){
+        const out = await fn.apply(this, args);
+        try { mountAthleteFilter(); } catch(e) {}
+        return out;
+      };
+      wrap.__patched_for_filter__ = true;
+      window[name] = wrap;
+    }
+  });
+})();
+
+/* MutationObserver: si un <select> apparait + tard, on remplit */
+(function(){
+  const obs = new MutationObserver(() => {
+    const ids = ['hpAth','athFilter','selectAthlete'];
+    if (ids.some(id => document.getElementById(id))) {
+      try { mountAthleteFilter(); } catch(e){}
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+})();
+
+/* Hook: après sync DB, on regonfle */
+window.__afterSupabaseSync = async function(){
+  try { mountAthleteFilter(); } catch(e){}
+};
+
+/* Si ta sync s'appelle syncStateFromSupabase, on l'enveloppe pour appeler __afterSupabaseSync */
+(function(){
+  const syncFn = window.syncStateFromSupabase;
+  if (typeof syncFn === 'function' && !syncFn.__patched_for_filter__) {
+    const wrap = async function(...args){
+      const res = await syncFn.apply(this, args);
+      if (typeof window.__afterSupabaseSync === 'function') await window.__afterSupabaseSync();
+      return res;
+    };
+    wrap.__patched_for_filter__ = True;
+    window.syncStateFromSupabase = wrap;
+  }
+})();
+</script>
+
 </body>
 </html>
 
