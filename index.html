@@ -394,7 +394,7 @@ function renderDashboard(){
     varHost.appendChild(box);
   });
 
-  // Weekly volume (filtered non-zero, compact)
+  // Weekly volume 
   destroyChart('vol50');
   const wk = groupWeeklyVolumesFiltered(50);
   charts.vol50 = new Chart($('chartVolume50').getContext('2d'), {
@@ -627,7 +627,7 @@ function renderPlanning(){
     <div class="panel">
       <h2>Thème de la semaine</h2>
       <div class="row" style="gap:10px;align-items:flex-end">
-        <input class="input" id="p_theme" placeholder="ex. 'Affûtage · focus départs & virages'"/>
+        <input class="input" id="p_theme"/>
         <button class="btn primary" id="pSaveTheme">Enregistrer</button>
       </div>
     </div>
