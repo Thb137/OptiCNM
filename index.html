@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CNM • App v8</title>
+  <title>CNM • App v8.6 (Pro)</title>
   <link rel="icon" href="data:,">
   <style>
 
@@ -70,6 +70,17 @@ canvas.donut{max-height:150px}
 .volumeSideNote{position:absolute;right:14px;top:10px;color:#9aa6c0;font-size:12px}
 @media (max-width: 900px){ .kpisLine{grid-template-columns:repeat(3,1fr)} }
 
+
+/* === HRV KPIs === */
+.hrvRow{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;margin:8px 0}
+.hrvHead{display:flex;align-items:center;gap:8px;font-weight:900;color:#eaf0ff}
+.hrvStatWrap{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:10px}
+.hrvStat{background:var(--chip);border:1px solid var(--chip-b);border-radius:12px;padding:8px 10px}
+.hrvStat .label{font-size:11px;color:var(--muted);margin-bottom:2px;display:flex;align-items:center;gap:6px}
+.hrvStat .value{font-size:14px;font-weight:800;color:#eaf2ff;line-height:1.2}
+.hrvStat .delta{font-size:11px;font-weight:700}
+.delta.up{color:#34d399}.delta.down{color:#f87171}.delta.flat{color:#a3b0c9}
+.tinyTime{font-size:11px;color:#95a3bf}
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -88,6 +99,7 @@ canvas.donut{max-height:150px}
       <button class="tab" data-tab="sessions">Séances</button>
       <button class="tab" data-tab="hrv">HRV</button>
       <button class="tab" data-tab="poids">Poids</button>
+      <button class="tab" data-tab="tests">Tests</button>
       <button class="tab" data-tab="competitions">Compétitions</button>
       <button class="tab" data-tab="planning">Planification</button>
     </nav>
@@ -207,7 +219,8 @@ function mountTabs(){
       if (tab==='hrv') renderHRV();
       if (tab==='poids') renderWeight();
       if (tab==='competitions') renderCompetitions();
-      if (tab==='planning') renderPlanning();
+            if (tab==='tests') renderTesting();
+if (tab==='planning') renderPlanning();
     };
   });
   if (tabs[0]) { tabs[0].click(); }
@@ -262,6 +275,14 @@ function mountAthleteFilter(){
 }
 
 // ====== SYNC ======
+async function refreshTests(){
+  if (!supa) { /* local only */ return; }
+  try {
+    const resT = await supa.from('tests').select('*').order('date', {ascending: true});
+    state.tests = (resT && resT.data) || (state.tests||[]);
+  } catch(e){ state.tests = state.tests || []; }
+}
+
 async function syncAll(){
   try{ const resA = await supa.from('athletes').select('*').order('created_at',{ascending:true}); state.athletes = (resA&&resA.data)||[]; }catch(e){ state.athletes=[]; }
   try{ const resS = await supa.from('sessions').select('*').order('date',{ascending:false}); state.sessions = (resS&&resS.data)||[]; }catch(e){ state.sessions=[]; }
@@ -336,9 +357,24 @@ function renderDashboard(){
     </div>
 
     <div class="panel" style="position:relative">
-      <h2>Volume hebdo (jusqu'à 50, non nuls)</h2>
-      <span class="volumeSideNote tiny">Somme de toutes les zones</span>
-      <canvas id="chartVolume50" height="80"></canvas>
+      <div class="grid g2">
+        <div>
+          <h2>Volume hebdo (jusqu'à 50, non nuls)</h2>
+          <span class="volumeSideNote tiny">Somme de toutes les zones</span>
+          <canvas id="chartVolume50" height="80"></canvas>
+        </div>
+        <div>
+          <h2>Tests</h2>
+          <div class="row" style="gap:8px;align-items:center">
+            <div class="tiny muted">Type</div>
+            <select id="testTypeSel" class="input small">
+              <option value="CSS" selected>Vitesse critique (CSS)</option>
+            </select>
+          </div>
+          <div id="testKPI" class="kpisLine" style="margin-top:8px"></div>
+          <div class="tiny muted" id="testDeltaNote" style="margin-top:6px"></div>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
@@ -394,7 +430,7 @@ function renderDashboard(){
     varHost.appendChild(box);
   });
 
-  // Weekly volume 
+  // Weekly volume (filtered non-zero, compact)
   destroyChart('vol50');
   const wk = groupWeeklyVolumesFiltered(50);
   charts.vol50 = new Chart($('chartVolume50').getContext('2d'), {
@@ -486,8 +522,19 @@ function renderSessions(){
     <div class="panel">
       <h2>Nouvelle séance</h2>
       <div class="grid g3" style="margin-top:8px">
-        <div><div class="tiny muted">Date</div><input class="input" id="s_date" type="date"/></div>
-        <div><div class="tiny muted">Participants</div><select id="s_att" class="input" multiple size="6">${opts}</select></div>
+        <div>
+          <div class="tiny muted">Date</div>
+          <input class="input" id="s_date" type="date"/>
+          <div class="tiny muted" style="margin-top:8px">AM / PM</div>
+          <select id="s_ampm" class="input">
+            <option value="AM">AM (matin)</option>
+            <option value="PM">PM (après-midi)</option>
+          </select>
+        </div>
+        <div>
+          <div class="tiny muted">Participants</div>
+          <select id="s_att" class="input" multiple size="6">${opts}</select>
+        </div>
         <div>
           <div class="tiny muted">Distance par zone (m)</div>
           <div class="grid g3">
@@ -501,7 +548,7 @@ function renderSessions(){
     </div>
     <div class="panel">
       <h2>Dernières séances</h2>
-      <table class="table"><thead><tr><th>Date</th><th>Participants</th><th>Total (m)</th><th>Note</th><th></th></tr></thead><tbody id="tblSess"></tbody></table>
+      <table class="table"><thead><tr><th>Date</th><th>AM/PM</th><th>Participants</th><th>Total (m)</th><th>Note</th><th></th></tr></thead><tbody id="tblSess"></tbody></table>
     </div>`;
 
   function toN(v){ return +v||0; }
@@ -514,9 +561,10 @@ function renderSessions(){
 
   $('btnAddSession').onclick = async ()=>{
     const date = $('s_date').value || toISO(new Date());
+    const ampm = $('s_ampm').value || 'AM';
     const attendees = [...$('s_att').selectedOptions].map(o=>o.value);
     if(!attendees.length) return alert('Sélectionne au moins un athlète');
-    const s = { date, attendees,
+    const s = { date, ampm, attendees,
       zone_vert:+$('z_vert').value||0, zone_bleu:+$('z_bleu').value||0, zone_orange:+$('z_orange').value||0, zone_rouge:+$('z_rouge').value||0, zone_violet:+$('z_violet').value||0,
       note: $('z_note').value||null
     };
@@ -528,7 +576,8 @@ function renderSessions(){
   tb.innerHTML = (state.sessions||[]).slice(0,20).map(s=>{
     const names = (s.attendees||[]).map(id => (state.athletes.find(a=>a.id===id)||{}).name || '—').join(', ');
     const total = (+s.zone_vert||0)+(+s.zone_bleu||0)+(+s.zone_orange||0)+(+s.zone_rouge||0)+(+s.zone_violet||0);
-    return `<tr><td>${s.date}</td><td>${names}</td><td>${total}</td><td>${s.note||''}</td><td><button class="btn tiny" data-del="${s.id}">Suppr.</button></td></tr>`;
+    const ampm = s.ampm || '—';
+    return `<tr><td>${s.date}</td><td>${ampm}</td><td>${names}</td><td>${total}</td><td>${s.note||''}</td><td><button class="btn tiny" data-del="${s.id}">Suppr.</button></td></tr>`;
   }).join('');
   tb.querySelectorAll('[data-del]').forEach(b=>{
     b.onclick = async ()=>{
@@ -540,33 +589,153 @@ function renderSessions(){
 }
 
 // ====== HRV ======
+
+
 function renderHRV(){
   if (!isUnlocked()) return renderHome(true);
   const opts = (state.athletes||[]).map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
   elView.innerHTML = `
     <div class="panel">
       <h2>Enregistrer HRV</h2>
-      <div class="grid g3">
+      <div class="grid g3" style="margin-top:8px">
         <div><div class="tiny muted">Athlète</div><select id="h_ath" class="input">${opts}</select></div>
         <div><div class="tiny muted">Date</div><input id="h_date" class="input" type="date"/></div>
-        <div><div class="tiny muted">HRV</div><input id="h_val" class="input" type="number" step="0.01"/></div>
+        <div></div>
       </div>
-      <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn primary" id="btnAddHRV">Enregistrer</button></div>
+
+      <div class="grid g3" style="gap:12px; margin-top:10px">
+        <div class="panel" style="margin:0">
+          <h3 style="margin-bottom:6px">Couché</h3>
+          <div class="grid g3">
+            <div><div class="tiny muted">FC</div><input id="h_fc_c" class="input" type="number" step="0.1"></div>
+            <div><div class="tiny muted">RMSSD</div><input id="h_rmssd_c" class="input" type="number" step="0.1"></div>
+            <div><div class="tiny muted">HF</div><input id="h_hf_c" class="input" type="number" step="0.1"></div>
+            <div><div class="tiny muted">LF</div><input id="h_lf_c" class="input" type="number" step="0.1"></div>
+            <div class="g3" style="grid-column:1 / -1"><div class="tiny muted">Commentaire</div><input id="h_comment_c" class="input"></div>
+          </div>
+          <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn primary" id="btnAddHRV_C">Enregistrer Couché</button></div>
+        </div>
+        <div class="panel" style="margin:0">
+          <h3 style="margin-bottom:6px">Debout</h3>
+          <div class="grid g3">
+            <div><div class="tiny muted">FC</div><input id="h_fc_d" class="input" type="number" step="0.1"></div>
+            <div><div class="tiny muted">RMSSD</div><input id="h_rmssd_d" class="input" type="number" step="0.1"></div>
+            <div><div class="tiny muted">HF</div><input id="h_hf_d" class="input" type="number" step="0.1"></div>
+            <div><div class="tiny muted">LF</div><input id="h_lf_d" class="input" type="number" step="0.1"></div>
+            <div class="g3" style="grid-column:1 / -1"><div class="tiny muted">Commentaire</div><input id="h_comment_d" class="input"></div>
+          </div>
+          <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn primary" id="btnAddHRV_D">Enregistrer Debout</button></div>
+        </div>
+      </div>
     </div>
+
+    <div class="panel">
+      <h2>Résultats (dernier test) — Δ vs précédent</h2>
+      <div id="hrvResults"></div>
+    </div>
+
     <div class="panel">
       <h2>Historique HRV</h2>
-      <table class="table"><thead><tr><th>Date</th><th>Athlète</th><th>HRV</th></tr></thead><tbody id="tblHRV"></tbody></table>
+      <table class="table"><thead>
+        <tr><th>Date</th><th>Athlète</th><th>Posture</th><th>FC</th><th>RMSSD</th><th>HF</th><th>LF</th><th>(LF+HF)/FC</th><th>HF/FC</th><th>LF/FC</th><th>Commentaire</th></tr>
+      </thead><tbody id="tblHRV"></tbody></table>
     </div>`;
-  $('btnAddHRV').onclick = async ()=>{
-    const athlete_id = $('h_ath').value; const date = $('h_date').value || toISO(new Date()); const value = +$('h_val').value||0;
-    const res = await supa.from('hrv').insert({ athlete_id, date, value });
-    if (res && res.error) return alert('Erreur: '+res.error.message);
-    await syncAll(); renderHRV();
-  };
-  const tb = $('tblHRV');
-  tb.innerHTML = (state.hrv||[]).slice(0,50).map(r=>{
-    var a = state.athletes.find(function(x){return x.id===r.athlete_id;});
-    return `<tr><td>${r.date}</td><td>${a ? a.name : '—'}</td><td>${r.value}</td></tr>`;
+
+  function rowsByAth(ath){ return (state.hrv||[]).filter(r=>r.athlete_id===ath).sort((a,b)=> (a.date||'').localeCompare(b.date||'')); }
+  function latestByPosture(ath, posture){
+    const rows = rowsByAth(ath).filter(r=> (r.posture||'').toLowerCase() === posture.toLowerCase());
+    return rows.length ? rows[rows.length-1] : null;
+  }
+  function prevOf(ath, posture, date){
+    const rows = rowsByAth(ath).filter(r=> (r.posture||'').toLowerCase() === posture.toLowerCase() && (r.date||'') < (date||''));
+    return rows.length ? rows[rows.length-1] : null;
+  }
+  function ratio(num, den){ return (num!=null && den) ? (+num)/(+den) : null; }
+  function fmt2(v){ return (v==null || Number.isNaN(v)) ? '—' : (Math.round((+v)*100)/100); }
+  function deltaPct(curr, prev){
+    if (prev==null || prev===0 || curr==null || isNaN(curr) || isNaN(prev)) return {txt:'—', cls:'flat'};
+    const pct = ((+curr - +prev)/Math.abs(+prev))*100;
+    const p = Math.round(pct*10)/10;
+    const cls = p>0 ? 'up' : (p<0 ? 'down' : 'flat');
+    const arrow = p>0 ? '↑' : (p<0 ? '↓' : '→');
+    return {txt: `${arrow} ${Math.abs(p)} %`, cls};
+  }
+  function kpiRow(ath, posture){
+    const last = latestByPosture(ath, posture);
+    if (!last) return `<div class="hrvRow"><div class="hrvHead">${posture==='Couché'?'🛏':'🧍'} ${posture}</div><div class="tiny muted">Aucune donnée.</div></div>`;
+    const prev = prevOf(ath, posture, last.date);
+    const fc = last.fc ?? null;
+    const rmssd = (last.rmssd != null ? last.rmssd : (last.value != null ? last.value : null));
+    const hf = last.hf ?? null;
+    const lf = last.lf ?? null;
+    const sum_over_fc = ratio((hf!=null?hf:0)+(lf!=null?lf:0), fc);
+    const hf_over_fc = ratio(hf, fc);
+    const lf_over_fc = ratio(lf, fc);
+    const dp_fc = deltaPct(fc, prev? prev.fc:null);
+    const dp_rmssd = deltaPct(rmssd, prev? (prev.rmssd!=null?prev.rmssd:prev.value):null);
+    const dp_hf = deltaPct(hf, prev? prev.hf:null);
+    const dp_lf = deltaPct(lf, prev? prev.lf:null);
+    const dp_sum_over_fc = deltaPct(sum_over_fc, prev? ratio((prev.hf!=null?prev.hf:0)+(prev.lf!=null?prev.lf:0), prev.fc):null);
+    const dp_hf_over_fc = deltaPct(hf_over_fc, prev? ratio(prev.hf, prev.fc):null);
+    const dp_lf_over_fc = deltaPct(lf_over_fc, prev? ratio(prev.lf, prev.fc):null);
+    return `
+      <div class="hrvRow">
+        <div class="hrvHead">${posture==='Couché'?'🛏':'🧍'} <span>${posture}</span> <span class="tinyTime">${last.date||''}</span></div>
+        <div class="hrvStatWrap">
+          <div class="hrvStat"><div class="label">FC moy.</div><div class="value">${fmt2(fc)}</div><div class="delta ${dp_fc.cls}">${dp_fc.txt}</div></div>
+          <div class="hrvStat"><div class="label">RMSSD</div><div class="value">${fmt2(rmssd)}</div><div class="delta ${dp_rmssd.cls}">${dp_rmssd.txt}</div></div>
+          <div class="hrvStat"><div class="label">LF</div><div class="value">${fmt2(lf)}</div><div class="delta ${dp_lf.cls}">${dp_lf.txt}</div></div>
+          <div class="hrvStat"><div class="label">HF</div><div class="value">${fmt2(hf)}</div><div class="delta ${dp_hf.cls}">${dp_hf.txt}</div></div>
+          <div class="hrvStat"><div class="label">(LF+HF)/FC</div><div class="value">${fmt2(sum_over_fc)}</div><div class="delta ${dp_sum_over_fc.cls}">${dp_sum_over_fc.txt}</div></div>
+          <div class="hrvStat"><div class="label">HF/FC</div><div class="value">${fmt2(hf_over_fc)}</div><div class="delta ${dp_hf_over_fc.cls}">${dp_hf_over_fc.txt}</div></div>
+          <div class="hrvStat"><div class="label">LF/FC</div><div class="value">${fmt2(lf_over_fc)}</div><div class="delta ${dp_lf_over_fc.cls}">${dp_lf_over_fc.txt}</div></div>
+        </div>
+      </div>`;
+  }
+
+  function renderKPIs(){
+    const ath = document.getElementById('h_ath').value || ((state.athletes[0]||{}).id||null);
+    const res = document.getElementById('hrvResults');
+    if (res) res.innerHTML = kpiRow(ath, 'Couché') + kpiRow(ath, 'Debout');
+  }
+
+  // Insert handlers (Supabase)
+  async function insertRow(posture){
+    const row = {
+      athlete_id: document.getElementById('h_ath').value,
+      date: document.getElementById('h_date').value || toISO(new Date()),
+      posture,
+      fc: +document.getElementById(posture==='Couché' ? 'h_fc_c' : 'h_fc_d').value || null,
+      rmssd: +document.getElementById(posture==='Couché' ? 'h_rmssd_c' : 'h_rmssd_d').value || null,
+      hf: +document.getElementById(posture==='Couché' ? 'h_hf_c' : 'h_hf_d').value || null,
+      lf: +document.getElementById(posture==='Couché' ? 'h_lf_c' : 'h_lf_d').value || null,
+      comment: document.getElementById(posture==='Couché' ? 'h_comment_c' : 'h_comment_d').value || null
+    };
+    const res = await supa.from('hrv').insert(row);
+    if (res && res.error) { alert('Erreur: '+res.error.message); return; }
+    await syncAll();
+    renderHRV();
+  }
+  document.getElementById('btnAddHRV_C').onclick = ()=> insertRow('Couché');
+  document.getElementById('btnAddHRV_D').onclick = ()=> insertRow('Debout');
+  document.getElementById('h_ath').onchange = renderKPIs;
+  renderKPIs();
+
+  // Render table history
+  const tb = document.getElementById('tblHRV');
+  tb.innerHTML = (state.hrv||[]).slice(0,100).map(r=>{
+    const a = state.athletes.find(x=>x.id===r.athlete_id);
+    const name = a ? a.name : '—';
+    const fc=r.fc??null, rmssd=(r.rmssd!=null?r.rmssd:(r.value!=null?r.value:null)), hf=r.hf??null, lf=r.lf??null;
+    const sum_over_fc = ratio((hf!=null?hf:0)+(lf!=null?lf:0), fc);
+    const hf_over_fc = ratio(hf, fc);
+    const lf_over_fc = ratio(lf, fc);
+    return `<tr>
+      <td>${r.date||''}</td><td>${name}</td><td>${r.posture||''}</td>
+      <td>${fmt2(fc)}</td><td>${fmt2(rmssd)}</td><td>${fmt2(hf)}</td><td>${fmt2(lf)}</td>
+      <td>${fmt2(sum_over_fc)}</td><td>${fmt2(hf_over_fc)}</td><td>${fmt2(lf_over_fc)}</td>
+      <td>${r.comment||''}</td>
+    </tr>`;
   }).join('');
 }
 
@@ -627,7 +796,7 @@ function renderPlanning(){
     <div class="panel">
       <h2>Thème de la semaine</h2>
       <div class="row" style="gap:10px;align-items:flex-end">
-        <input class="input" id="p_theme"/>
+        <input class="input" id="p_theme" placeholder="ex. 'Affûtage · focus départs & virages'"/>
         <button class="btn primary" id="pSaveTheme">Enregistrer</button>
       </div>
     </div>
@@ -733,3 +902,100 @@ window.addEventListener('load', async () => {
 </script>
 </body>
 </html>
+
+<script>
+function renderTesting(){
+  if (!isUnlocked()) return renderHome(true);
+  const opts = (state.athletes||[]).map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+  elView.innerHTML = `
+    <div class="panel">
+      <h2>Tests — Vitesse critique (CSS)</h2>
+      <div class="grid g3" style="margin-top:8px">
+        <div><div class="tiny muted">Athlète</div><select id="t_ath" class="input">${opts}</select></div>
+        <div><div class="tiny muted">Date</div><input id="t_date" type="date" class="input"/></div>
+        <div></div>
+      </div>
+      <div class="grid g3" style="margin-top:8px">
+        <div><div class="tiny muted">Temps 200m (mm:ss)</div><input id="t_200" class="input" placeholder="ex: 02:20"></div>
+        <div><div class="tiny muted">Temps 400m (mm:ss)</div><input id="t_400" class="input" placeholder="ex: 05:00"></div>
+        <div class="row" style="align-items:flex-end"><button id="btnCalc" class="btn">Calculer</button><button id="btnSave" class="btn primary" style="margin-left:8px">Enregistrer</button></div>
+      </div>
+      <div class="kpisLine" id="t_kpis" style="margin-top:10px"></div>
+    </div>
+    <div class="panel">
+      <h2>Historique des tests (CSS)</h2>
+      <table class="table"><thead>
+        <tr><th>Date</th><th>Athlète</th><th>t200</th><th>t400</th><th>CSS (m/s)</th><th>Allure (100m)</th></tr>
+      </thead><tbody id="t_tbl"></tbody></table>
+    </div>`;
+  function toSec(v){ if (!v) return null; if (typeof v==='number') return v; const p=String(v).split(':'); if(p.length===2) return (+p[0])*60+(+p[1]); if(p.length===3) return (+p[0])*3600+(+p[1])*60+(+p[2]); const n=+v; return isNaN(n)? null:n; }
+  function fmt(x){ return (x==null||isNaN(x))? '—' : (Math.round(x*100)/100); }
+  function pace100(sec){ if (sec==null||isNaN(sec)) return '—'; const m=Math.floor(sec/60); const s=Math.round(sec%60).toString().padStart(2,'0'); return m+':'+s; }
+  function computeCSS(t200, t400){ if(!t200||!t400|| (t400-t200)<=0) return null; return 200/(t400-t200); }
+
+  function renderHistory(){
+    const ath = document.getElementById('t_ath').value || selectedAthleteId;
+    const rows = (state.tests||[]).filter(r=> r.type==='CSS' && r.athlete_id===ath).sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    const tb = document.getElementById('t_tbl');
+    tb.innerHTML = rows.map(r=>{
+      const t200=toSec(r.t200), t400=toSec(r.t400);
+      const cv=computeCSS(t200,t400), p=(t400-t200)/2;
+      const aobj=state.athletes.find(x=>x.id===r.athlete_id);
+      return `<tr><td>${r.date||''}</td><td>${aobj?aobj.name:'—'}</td><td>${r.t200||''}</td><td>${r.t400||''}</td><td>${fmt(cv)}</td><td>${pace100(p)}</td></tr>`;
+    }).join('');
+  }
+
+  function renderKPIs(){
+    const ath = document.getElementById('t_ath').value || selectedAthleteId;
+    const rows = (state.tests||[]).filter(r=> r.type==='CSS' && r.athlete_id===ath).sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+    const box = document.getElementById('t_kpis');
+    if (!rows.length){ box.innerHTML='<div class="tiny muted">Aucun test.</div>'; return; }
+    const last=rows[rows.length-1], prev=rows.length>1?rows[rows.length-2]:null;
+    const t200=toSec(last.t200), t400=toSec(last.t400);
+    if(!t200||!t400|| (t400-t200)<=0){ box.innerHTML='<div class="tiny muted">Données invalides.</div>'; return; }
+    const cv=computeCSS(t200,t400), p=(t400-t200)/2;
+    let prevCv=null; if(prev){ const t200p=toSec(prev.t200), t400p=toSec(prev.t400); if(t200p&&t400p&&(t400p-t200p)>0) prevCv=computeCSS(t200p,t400p); }
+    const delta = (!prevCv||!cv)? {txt:'—',cls:'flat'} : (()=>{ const pct=(cv-prevCv)/Math.abs(prevCv)*100; const r=Math.round(pct*10)/10; const cls=r>0?'up':(r<0?'down':'flat'); const arrow=r>0?'↑':(r<0?'↓':'→'); return {txt:`${arrow} ${Math.abs(r)} %`, cls}; })();
+    box.innerHTML = `
+      <div class="kpiChip"><div class="label">CSS (m/s)</div><div class="value">${fmt(cv)}</div><div class="delta ${delta.cls}">${delta.txt}</div></div>
+      <div class="kpiChip"><div class="label">CSS (km/h)</div><div class="value">${fmt(cv*3.6)}</div></div>
+      <div class="kpiChip"><div class="label">Allure 100m</div><div class="value">${pace100(p)}</div></div>`;
+  }
+
+  document.getElementById('btnCalc').onclick = renderKPIs;
+  document.getElementById('t_ath').onchange = ()=>{ renderKPIs(); renderHistory(); };
+
+  document.getElementById('btnSave').onclick = async ()=>{
+    const row = {
+      type:'CSS',
+      athlete_id: document.getElementById('t_ath').value || selectedAthleteId,
+      date: document.getElementById('t_date').value || toISO(new Date()),
+      t200: document.getElementById('t_200').value,
+      t400: document.getElementById('t_400').value
+    };
+    let ok=false;
+    if (supa){
+      try{
+        const res = await supa.from('tests').insert(row);
+        if (res && res.error){ alert('Erreur: '+res.error.message); }
+        else ok=true;
+      }catch(e){}
+    }
+    if (!ok){
+      state.tests = state.tests || [];
+      state.tests.push(row);
+      try{ localStorage.setItem('cnm_tests', JSON.stringify(state.tests)); }catch(e){}
+    }
+    await refreshTests().catch(()=>{});
+    renderTesting();
+  };
+
+  try{
+    if (!state.tests || !state.tests.length){
+      const raw = localStorage.getItem('cnm_tests'); if (raw) state.tests = JSON.parse(raw);
+    }
+  }catch(e){}
+  const sel = document.getElementById('t_ath'); if (selectedAthleteId && sel) sel.value = selectedAthleteId;
+  renderKPIs(); renderHistory();
+}
+</script>
