@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CNM • App v8.6 (Pro)</title>
+  <title>CNM • App v8.6 </title>
   <link rel="icon" href="data:,">
   <style>
 
@@ -41,7 +41,7 @@ h1,h2,h3{margin:0 0 8px 0}h2{font-size:16px}h3{font-size:14px;color:#e8ecff}
 .caption{font-size:12px;color:#93a2bf;margin-top:6px;text-align:left}
 canvas{background:#0b1020;border:1px solid #1a2340;border-radius:12px;padding:6px}
 canvas.donut{max-height:150px}
-/* KPI compact */
+/* KPI */
 .kpisLine{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 .kpiZone{background:linear-gradient(135deg,#062a14 0%, #052314 100%);border:1px solid #14442d;border-radius:14px;padding:6px;color:#b7ffda;min-width:92px;width:100%}
 .kpiZone .name{font-size:10px;font-weight:700}.kpiZone .val{font-size:12px;font-weight:800}.kpiZone .meta{font-size:9px;margin-top:4px;color:#9be0c9}
@@ -133,7 +133,7 @@ let weeksA = [getWeekString(new Date())];
 let weeksB = [getWeekString(new Date())];
 const charts = {}; let activeZone = null;
 
-// ====== UTILS ======
+// Quantif
 const elView = document.getElementById('view');
 const $ = (id) => document.getElementById(id);
 const toISO = (d) => { const dt = (d instanceof Date) ? d : new Date(d); return isNaN(dt) ? null : dt.toISOString().slice(0,10); };
@@ -201,7 +201,7 @@ function groupWeeklyVolumesFiltered(max=50){
   return { labels: entries.map(e=>e[0]), data: entries.map(e=> +(e[1].toFixed(2))) };
 }
 
-// ====== NAV ======
+// NAV
 function mountTabs(){
   const tabs = document.querySelectorAll('.tab');
   const lockOther = !isUnlocked();
@@ -226,7 +226,7 @@ if (tab==='planning') renderPlanning();
   if (tabs[0]) { tabs[0].click(); }
 }
 
-// ====== HOME ======
+// HOME
 function renderHome(){
   if (!isUnlocked()){
     elView.innerHTML = `
@@ -264,7 +264,7 @@ function renderHome(){
   $('btnRelock').onclick = ()=>{ setUnlocked(false); mountTabs(); renderHome(true); };
 }
 
-// ====== FILTER ATHLETE ======
+// Filtrer 
 function mountAthleteFilter(){
   const sel = $('athFilter'); if(!sel) return;
   const prev = sel.value;
@@ -274,7 +274,7 @@ function mountAthleteFilter(){
   sel.onchange = (e)=>{ selectedAthleteId = e.target.value; const n = document.querySelector('.tab.active'); const active = n ? n.dataset.tab : null; if (active==='dashboard') renderDashboard(); };
 }
 
-// ====== SYNC ======
+// SYNC 
 async function refreshTests(){
   if (!supa) { /* local only */ return; }
   try {
@@ -295,7 +295,7 @@ async function syncAll(){
   mountAthleteFilter();
 }
 
-// ====== DASHBOARD ======
+// DASHBOARD 
 function renderDashboard(){
   if (!isUnlocked()) return renderHome(true);
   const weekList = weeksWithData(50);
@@ -430,7 +430,7 @@ function renderDashboard(){
     varHost.appendChild(box);
   });
 
-  // Weekly volume (filtered non-zero, compact)
+  // Weekly volume 
   destroyChart('vol50');
   const wk = groupWeeklyVolumesFiltered(50);
   charts.vol50 = new Chart($('chartVolume50').getContext('2d'), {
@@ -484,7 +484,7 @@ function renderDashboard(){
   $('cmpB').onchange = (e)=>{ const sel=[...e.target.selectedOptions].map(o=>o.value); if(sel.length) weeksB=sel; renderDashboard(); };
 }
 
-// ====== ATHLETES ======
+// ATHLETES 
 function renderAthletes(){
   if (!isUnlocked()) return renderHome(true);
   elView.innerHTML = `
@@ -514,7 +514,7 @@ function renderAthletes(){
   });
 }
 
-// ====== SESSIONS (reverted/classic with live total & note) ======
+// SESSIONS
 function renderSessions(){
   if (!isUnlocked()) return renderHome(true);
   const opts = (state.athletes||[]).map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
@@ -588,7 +588,7 @@ function renderSessions(){
   });
 }
 
-// ====== HRV ======
+// HRV
 
 
 function renderHRV(){
@@ -699,7 +699,7 @@ function renderHRV(){
     if (res) res.innerHTML = kpiRow(ath, 'Couché') + kpiRow(ath, 'Debout');
   }
 
-  // Insert handlers (Supabase)
+  // supabase
   async function insertRow(posture){
     const row = {
       athlete_id: document.getElementById('h_ath').value,
@@ -739,7 +739,7 @@ function renderHRV(){
   }).join('');
 }
 
-// ====== WEIGHT ======
+// POIDS
 function renderWeight(){
   if (!isUnlocked()) return renderHome(true);
   const opts = (state.athletes||[]).map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
@@ -770,13 +770,13 @@ function renderWeight(){
   }).join('');
 }
 
-// ====== COMPETITIONS (placeholder) ======
+// COMPETITION
 function renderCompetitions(){
   if (!isUnlocked()) return renderHome(true);
-  elView.innerHTML = `<div class="panel"><h2>Compétitions (prototype)</h2><div class="tiny muted">Module à affiner.</div></div>`;
+  elView.innerHTML = `<div class="panel"><h2>Compétitions (prototype)</h2><div class="tiny muted">Module à faire.</div></div>`;
 }
 
-// ====== PLANNING (Week + Season) ======
+// PLANIF
 function renderPlanning(){
   if (!isUnlocked()) return renderHome(true);
   const weeksOpts = listWeeks(50).map(w=>`<option value="${w}" ${w===weekGlobal?'selected':''}>${w}</option>`).join('');
@@ -891,7 +891,7 @@ function renderPlanning(){
   };
 }
 
-// ====== BOOT ======
+// BOOT
 window.addEventListener('load', async () => {
   try{ await syncAll(); }catch(e){ console.warn('sync error', e); }
   const tabs = document.querySelectorAll('.tab');
